@@ -7,8 +7,9 @@ import (
 	"os"
 	"strings"
 
-	"github.com/go-kit/kit/log"
+	"github.com/go-kit/log"
 	"github.com/go-stack/stack"
+	"github.com/hashicorp/go-multierror"
 )
 
 // Level represents the logging level
@@ -111,23 +112,23 @@ func (l *L) With(keyvals ...interface{}) *L {
 }
 
 // Debug logs a message at the debug level
-func (l *L) Debug(msg interface{}, keyvals ...interface{}) error {
-	return l.log(Debug, log.With(l.logger, "src", l.source(), "level", Debug.String(), "msg", msg), keyvals...)
+func (l *L) Debug(msg interface{}, keyvals ...interface{}) {
+	l.log(Debug, log.With(l.logger, "src", l.source(), "level", Debug.String(), "msg", msg), keyvals...)
 }
 
 // Info logs a message at the info level
-func (l *L) Info(msg interface{}, keyvals ...interface{}) error {
-	return l.log(Info, log.With(l.logger, "src", l.source(), "level", Info.String(), "msg", msg), keyvals...)
+func (l *L) Info(msg interface{}, keyvals ...interface{}) {
+	l.log(Info, log.With(l.logger, "src", l.source(), "level", Info.String(), "msg", msg), keyvals...)
 }
 
 // Warn logs a message at the warning level
-func (l *L) Warn(msg interface{}, keyvals ...interface{}) error {
-	return l.log(Warn, log.With(l.logger, "src", l.source(), "level", Warn.String(), "msg", msg), keyvals...)
+func (l *L) Warn(msg interface{}, keyvals ...interface{}) {
+	l.log(Warn, log.With(l.logger, "src", l.source(), "level", Warn.String(), "msg", msg), keyvals...)
 }
 
 // Err logs a message at the error level
-func (l *L) Err(msg interface{}, keyvals ...interface{}) error {
-	return l.log(Err, log.With(l.logger, "src", l.source(), "level", Err.String(), "msg", msg), keyvals...)
+func (l *L) Err(msg interface{}, keyvals ...interface{}) {
+	l.log(Err, log.With(l.logger, "src", l.source(), "level", Err.String(), "msg", msg), keyvals...)
 }
 
 // Fatal logs a message at the fatal level and also exits the program by calling
@@ -141,15 +142,15 @@ func (l *L) source() string {
 	return strings.Join(l.src, ".")
 }
 
-func (l *L) log(level Level, lvl log.Logger, keyvals ...interface{}) error {
+func (l *L) log(level Level, lvl log.Logger, keyvals ...interface{}) {
 	if l == nil {
-		return nil
+		return
 	}
 	if level > l.Level && l.Level != All {
-		return nil
+		return
 	}
 
-	return lvl.Log(keyvals...)
+	_ = lvl.Log(keyvals...)
 }
 
 // Default returns a default logger implementation
@@ -161,4 +162,25 @@ func Default() *L {
 // silencing log output from tests
 func Silence() *L {
 	return New(ioutil.Discard, "discard", "")
+}
+
+// LogError logs an error. It automatically unwinds multi-errors (not recursively...yet).
+func (l *L) LogError(msg string, err error) {
+	mErr, ok := err.(*multierror.Error)
+	if !ok {
+		l.Err(msg, "error", err.Error())
+		return
+	}
+
+	keyvals := make([]interface{}, 0, len(mErr.Errors)*2)
+
+	for i, e := range mErr.Errors {
+		keyvals = append(
+			keyvals,
+			fmt.Sprintf("error_%02d", i),
+			e.Error(),
+		)
+	}
+
+	l.Err(msg, keyvals...)
 }

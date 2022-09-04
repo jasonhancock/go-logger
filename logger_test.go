@@ -2,10 +2,12 @@ package logger
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"testing"
 	"time"
 
+	"github.com/hashicorp/go-multierror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -57,5 +59,18 @@ func TestLogger(t *testing.T) {
 		require.Contains(t, buf.String(), "key4=value4")
 		require.Contains(t, buf.String(), "key5=value5")
 		require.Contains(t, buf.String(), "src=somelogger.sublogger2")
+	})
+
+	t.Run("LogError", func(t *testing.T) {
+		defer buf.Reset()
+
+		var err error
+		err = multierror.Append(err, errors.New("some err1"))
+		err = multierror.Append(err, errors.New("some err2"))
+		l.LogError("some error", err)
+
+		require.Contains(t, buf.String(), `msg="some error"`)
+		require.Contains(t, buf.String(), `error_00="some err1"`)
+		require.Contains(t, buf.String(), `error_01="some err2"`)
 	})
 }
