@@ -3,13 +3,18 @@ package logger
 import (
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"strings"
 
 	"github.com/go-kit/log"
 	"github.com/go-stack/stack"
 	"github.com/hashicorp/go-multierror"
+)
+
+// Constants defining various output formats.
+const (
+	FormatLogFmt = "logfmt"
+	FormatJSON   = "json"
 )
 
 // Level represents the logging level
@@ -61,12 +66,22 @@ type L struct {
 }
 
 // New initializes a new logger. If w is nil, logs will be sent to stdout.
-func New(w io.Writer, name, level string, keyvals ...interface{}) *L {
+func New(w io.Writer, name, level, format string, keyvals ...interface{}) *L {
 	if w == nil {
 		w = os.Stdout
 	}
-	l := log.With(
-		log.NewLogfmtLogger(log.NewSyncWriter(w)),
+
+	var l log.Logger
+
+	switch strings.ToLower(format) {
+	case FormatJSON:
+		l = log.NewJSONLogger(log.NewSyncWriter(w))
+	default:
+		l = log.NewLogfmtLogger(log.NewSyncWriter(w))
+	}
+
+	l = log.With(
+		l,
 		"ts", log.DefaultTimestampUTC,
 		"caller", caller(5),
 	)
@@ -155,13 +170,13 @@ func (l *L) log(level Level, lvl log.Logger, keyvals ...interface{}) {
 
 // Default returns a default logger implementation
 func Default() *L {
-	return New(nil, "default", "")
+	return New(nil, "default", "", FormatLogFmt)
 }
 
 // Silence returns a logger that writes everything to /dev/null. Useful for
 // silencing log output from tests
 func Silence() *L {
-	return New(ioutil.Discard, "discard", "")
+	return New(io.Discard, "discard", "", FormatLogFmt)
 }
 
 // LogError logs an error. It automatically unwinds multi-errors (not recursively...yet).

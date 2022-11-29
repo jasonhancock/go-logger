@@ -2,6 +2,7 @@ package logger
 
 import (
 	"bytes"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"testing"
@@ -14,7 +15,7 @@ import (
 func TestLogger(t *testing.T) {
 	var buf bytes.Buffer
 
-	l := New(&buf, "somelogger", "info", "key1", "value1")
+	l := New(&buf, "somelogger", "info", FormatLogFmt, "key1", "value1")
 
 	t.Run("info", func(t *testing.T) {
 		defer buf.Reset()
@@ -73,4 +74,21 @@ func TestLogger(t *testing.T) {
 		require.Contains(t, buf.String(), `error_00="some err1"`)
 		require.Contains(t, buf.String(), `error_01="some err2"`)
 	})
+}
+
+func TestLoggerJSON(t *testing.T) {
+	var buf bytes.Buffer
+
+	l := New(&buf, "somelogger", "info", FormatJSON, "key1", "value1")
+
+	l.Info("foo", "key2", "value2")
+	var data map[string]string
+	require.NoError(t, json.NewDecoder(&buf).Decode(&data))
+	require.Equal(t, "value1", data["key1"])
+	require.Equal(t, "value2", data["key2"])
+	require.Contains(t, data["caller"], "github.com/jasonhancock/go-logger/logger_test.go")
+	require.Contains(t, data["ts"], fmt.Sprintf("%d", time.Now().Year()))
+	require.Equal(t, "somelogger", data["src"])
+	require.Equal(t, "info", data["level"])
+	require.Equal(t, "foo", data["msg"])
 }
