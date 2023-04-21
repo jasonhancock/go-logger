@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"strings"
 
 	"github.com/go-kit/log"
@@ -66,18 +67,23 @@ type L struct {
 }
 
 // New initializes a new logger. If w is nil, logs will be sent to stdout.
-func New(w io.Writer, name, level, format string, keyvals ...interface{}) *L {
-	if w == nil {
-		w = os.Stdout
+func New(opts ...Option) *L {
+	opt := &options{
+		destination: os.Stdout,
+		name:        filepath.Base(os.Args[0]),
+	}
+
+	for _, o := range opts {
+		o(opt)
 	}
 
 	var l log.Logger
 
-	switch strings.ToLower(format) {
+	switch strings.ToLower(opt.format) {
 	case FormatJSON:
-		l = log.NewJSONLogger(log.NewSyncWriter(w))
+		l = log.NewJSONLogger(log.NewSyncWriter(opt.destination))
 	default:
-		l = log.NewLogfmtLogger(log.NewSyncWriter(w))
+		l = log.NewLogfmtLogger(log.NewSyncWriter(opt.destination))
 	}
 
 	l = log.With(
@@ -86,14 +92,14 @@ func New(w io.Writer, name, level, format string, keyvals ...interface{}) *L {
 		"caller", caller(5),
 	)
 
-	if len(keyvals) > 0 {
-		l = log.With(l, keyvals...)
+	if len(opt.keyvals) > 0 {
+		l = log.With(l, opt.keyvals...)
 	}
 
 	return &L{
 		logger: l,
-		Level:  ParseLevel(level),
-		src:    []string{name},
+		Level:  ParseLevel(opt.level),
+		src:    []string{opt.name},
 	}
 }
 
@@ -170,13 +176,19 @@ func (l *L) log(level Level, lvl log.Logger, keyvals ...interface{}) {
 
 // Default returns a default logger implementation
 func Default() *L {
-	return New(nil, "default", "", FormatLogFmt)
+	return New(
+		WithName("default"),
+		WithFormat(FormatLogFmt),
+	)
 }
 
 // Silence returns a logger that writes everything to /dev/null. Useful for
 // silencing log output from tests
 func Silence() *L {
-	return New(io.Discard, "discard", "", FormatLogFmt)
+	return New(
+		WithDestination(io.Discard),
+		WithName("discard"),
+	)
 }
 
 // LogError logs an error. It automatically unwinds multi-errors (not recursively...yet).
