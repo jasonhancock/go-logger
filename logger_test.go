@@ -15,7 +15,13 @@ import (
 func TestLogger(t *testing.T) {
 	var buf bytes.Buffer
 
-	l := New(&buf, "somelogger", "info", FormatLogFmt, "key1", "value1")
+	l := New(
+		WithDestination(&buf),
+		WithName("somelogger"),
+		WithLevel("info"),
+		WithFormat(FormatLogFmt),
+		With("key1", "value1"),
+	)
 
 	t.Run("info", func(t *testing.T) {
 		defer buf.Reset()
@@ -79,7 +85,13 @@ func TestLogger(t *testing.T) {
 func TestLoggerJSON(t *testing.T) {
 	var buf bytes.Buffer
 
-	l := New(&buf, "somelogger", "info", FormatJSON, "key1", "value1")
+	l := New(
+		WithDestination(&buf),
+		WithName("somelogger"),
+		WithLevel("info"),
+		WithFormat(FormatJSON),
+		With("key1", "value1"),
+	)
 
 	l.Info("foo", "key2", "value2")
 	var data map[string]string
