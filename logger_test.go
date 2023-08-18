@@ -104,3 +104,33 @@ func TestLoggerJSON(t *testing.T) {
 	require.Equal(t, "info", data["level"])
 	require.Equal(t, "foo", data["msg"])
 }
+
+func TestToString(t *testing.T) {
+	tests := []struct {
+		desc     string
+		input    any
+		expected string
+	}{
+		{"string", "string", "string"},
+		{"error", errors.New("error"), "error"},
+		{"custom error", &myError{}, "my error"},
+		{"stringer", &myStringer{}, "my string"},
+		{"invalid string conversion", &notErrorStringer{}, "unable to convert type *logger.notErrorStringer to string"},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.desc, func(t *testing.T) {
+			require.Equal(t, tt.expected, toString(tt.input))
+		})
+	}
+}
+
+type myError struct{}
+
+func (e *myError) Error() string { return "my error" }
+
+type myStringer struct{}
+
+func (s *myStringer) String() string { return "my string" }
+
+type notErrorStringer struct{}

@@ -143,33 +143,33 @@ func (l *L) With(keyvals ...any) *L {
 }
 
 // Debug logs a message at the debug level
-func (l *L) Debug(msg string, keyvals ...any) {
+func (l *L) Debug(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelDebug, msg, keyvals...)
 }
 
 // Info logs a message at the info level
-func (l *L) Info(msg string, keyvals ...any) {
+func (l *L) Info(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelInfo, msg, keyvals...)
 }
 
 // Warn logs a message at the warning level
-func (l *L) Warn(msg string, keyvals ...any) {
+func (l *L) Warn(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelWarn, msg, keyvals...)
 }
 
 // Err logs a message at the error level
-func (l *L) Err(msg string, keyvals ...any) {
+func (l *L) Err(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelError, msg, keyvals...)
 }
 
 // Fatal logs a message at the fatal level and also exits the program by calling
 // os.Exit
-func (l *L) Fatal(msg string, keyvals ...any) {
+func (l *L) Fatal(msg any, keyvals ...any) {
 	l.log(context.Background(), LevelFatal, msg, keyvals...)
 	os.Exit(1)
 }
 
-func (l *L) log(ctx context.Context, lvl slog.Level, msg string, keyvals ...any) {
+func (l *L) log(ctx context.Context, lvl slog.Level, msg any, keyvals ...any) {
 	if l == nil {
 		return
 	}
@@ -178,7 +178,20 @@ func (l *L) log(ctx context.Context, lvl slog.Level, msg string, keyvals ...any)
 		keyvals = append(keyvals, slog.String("caller", caller(3)))
 	}
 
-	l.slogger.Log(ctx, lvl, msg, keyvals...)
+	l.slogger.Log(ctx, lvl, toString(msg), keyvals...)
+}
+
+func toString(s any) string {
+	switch v := s.(type) {
+	case string:
+		return v
+	case error:
+		return v.Error()
+	case fmt.Stringer:
+		return v.String()
+	default:
+		return fmt.Sprintf("unable to convert type %T to string", v)
+	}
 }
 
 // Default returns a default logger implementation
