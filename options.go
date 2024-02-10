@@ -27,36 +27,45 @@ func WithFormat(format string) Option {
 	}
 }
 
+// With adds key value pairs to the logger.
 func With(keyvals ...interface{}) Option {
 	return func(o *options) {
 		o.keyvals = keyvals
 	}
 }
 
+// WithLevel sets the logging level of the logger.
 func WithLevel(level string) Option {
 	return func(o *options) {
 		o.level = level
 	}
 }
 
+// WithDestination sets the target for where the output of the logger should be
+// written.
 func WithDestination(w io.Writer) Option {
 	return func(o *options) {
 		o.destination = w
 	}
 }
 
+// WithName specifies the name of the application. If not specified, the current
+// processes name will be used.
 func WithName(name string) Option {
 	return func(o *options) {
 		o.name = name
 	}
 }
 
+// WithCaller sets whether or not to include the source file and line number of
+// where the message originated.
 func WithCaller(showCaller bool) Option {
 	return func(o *options) {
 		o.showCaller = showCaller
 	}
 }
 
+// WithTimeLocation specifies the locale to log the time in.
 func WithTimeLocation(loc *time.Location) Option {
 	return func(o *options) {
 		o.timeFormatter = func(ts time.Time) string {
