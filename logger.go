@@ -20,6 +20,12 @@ const (
 	FormatJSON   = "json"
 )
 
+// AvailableFormats lists the available format types.
+var AvailableFormats = []string{
+	FormatLogFmt,
+	FormatJSON,
+}
+
 const (
 	LevelAll   = slog.Level(-10)
 	LevelFatal = slog.Level(12)
