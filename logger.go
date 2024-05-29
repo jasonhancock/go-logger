@@ -11,7 +11,6 @@ import (
 	"time"
 
 	"github.com/go-stack/stack"
-	"github.com/hashicorp/go-multierror"
 )
 
 // Constants defining various output formats.
@@ -217,17 +216,23 @@ func Silence() *L {
 	)
 }
 
+type multiError interface {
+	WrappedErrors() []error
+}
+
 // LogError logs an error. It automatically unwinds multi-errors (not recursively...yet).
 func (l *L) LogError(msg string, err error) {
-	mErr, ok := err.(*multierror.Error)
+	mErr, ok := err.(multiError)
 	if !ok {
 		l.Err(msg, slog.String("error", err.Error()))
 		return
 	}
 
-	keyvals := make([]any, 0, len(mErr.Errors))
+	errs := mErr.WrappedErrors()
 
-	for i, e := range mErr.Errors {
+	keyvals := make([]any, 0, len(errs))
+
+	for i, e := range errs {
 		keyvals = append(
 			keyvals,
 			slog.String(
