@@ -221,16 +221,14 @@ type multiError interface {
 }
 
 // LogError logs an error. It automatically unwinds multi-errors (not recursively...yet).
-func (l *L) LogError(msg string, err error) {
+func (l *L) LogError(msg string, err error, keyvals ...any) {
 	mErr, ok := err.(multiError)
 	if !ok {
-		l.Err(msg, slog.String("error", err.Error()))
+		l.Err(msg, append(keyvals, slog.String("error", err.Error()))...)
 		return
 	}
 
 	errs := mErr.WrappedErrors()
-
-	keyvals := make([]any, 0, len(errs))
 
 	for i, e := range errs {
 		keyvals = append(

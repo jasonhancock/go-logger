@@ -68,19 +68,57 @@ func TestLogger(t *testing.T) {
 	})
 
 	t.Run("LogError", func(t *testing.T) {
-		defer buf.Reset()
+		t.Run("single", func(t *testing.T) {
+			defer buf.Reset()
 
-		err := &myMulti{
-			errs: []error{
-				errors.New("some err1"),
-				errors.New("some err2"),
-			},
-		}
-		l.LogError("some error", err)
+			l.LogError("some error", errors.New("some error message"))
 
-		require.Contains(t, buf.String(), `msg="some error"`)
-		require.Contains(t, buf.String(), `error_00="some err1"`)
-		require.Contains(t, buf.String(), `error_01="some err2"`)
+			require.Contains(t, buf.String(), `msg="some error"`)
+			require.Contains(t, buf.String(), `error="some error message"`)
+		})
+
+		t.Run("single with kv", func(t *testing.T) {
+			defer buf.Reset()
+
+			l.LogError("some error", errors.New("some error message"), "key1", "value1")
+
+			require.Contains(t, buf.String(), `msg="some error"`)
+			require.Contains(t, buf.String(), `error="some error message"`)
+			require.Contains(t, buf.String(), "key1=value1")
+		})
+
+		t.Run("multi", func(t *testing.T) {
+			defer buf.Reset()
+
+			err := &myMulti{
+				errs: []error{
+					errors.New("some err1"),
+					errors.New("some err2"),
+				},
+			}
+			l.LogError("some error", err)
+
+			require.Contains(t, buf.String(), `msg="some error"`)
+			require.Contains(t, buf.String(), `error_00="some err1"`)
+			require.Contains(t, buf.String(), `error_01="some err2"`)
+		})
+
+		t.Run("multi with kv", func(t *testing.T) {
+			defer buf.Reset()
+
+			err := &myMulti{
+				errs: []error{
+					errors.New("some err1"),
+					errors.New("some err2"),
+				},
+			}
+			l.LogError("some error", err, "key1", "value1")
+
+			require.Contains(t, buf.String(), `msg="some error"`)
+			require.Contains(t, buf.String(), `error_00="some err1"`)
+			require.Contains(t, buf.String(), `error_01="some err2"`)
+			require.Contains(t, buf.String(), "key1=value1")
+		})
 	})
 }
 
