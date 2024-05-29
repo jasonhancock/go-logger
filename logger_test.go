@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hashicorp/go-multierror"
 	"github.com/stretchr/testify/require"
 )
 
@@ -71,9 +70,12 @@ func TestLogger(t *testing.T) {
 	t.Run("LogError", func(t *testing.T) {
 		defer buf.Reset()
 
-		var err error
-		err = multierror.Append(err, errors.New("some err1"))
-		err = multierror.Append(err, errors.New("some err2"))
+		err := &myMulti{
+			errs: []error{
+				errors.New("some err1"),
+				errors.New("some err2"),
+			},
+		}
 		l.LogError("some error", err)
 
 		require.Contains(t, buf.String(), `msg="some error"`)
@@ -134,3 +136,15 @@ type myStringer struct{}
 func (s *myStringer) String() string { return "my string" }
 
 type notErrorStringer struct{}
+
+type myMulti struct {
+	errs []error
+}
+
+func (m *myMulti) WrappedErrors() []error {
+	return m.errs
+}
+
+func (m *myMulti) Error() string {
+	return errors.Join(m.errs...).Error()
+}
