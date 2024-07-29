@@ -224,7 +224,7 @@ type multiError interface {
 func (l *L) LogError(msg string, err error, keyvals ...any) {
 	mErr, ok := err.(multiError)
 	if !ok {
-		l.Err(msg, append(keyvals, slog.String("error", err.Error()))...)
+		l.log(context.Background(), slog.LevelError, msg, append(keyvals, slog.String("error", err.Error()))...)
 		return
 	}
 
@@ -240,5 +240,5 @@ func (l *L) LogError(msg string, err error, keyvals ...any) {
 		)
 	}
 
-	l.Err(msg, keyvals...)
+	l.log(context.Background(), slog.LevelError, msg, keyvals...)
 }
