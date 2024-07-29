@@ -52,9 +52,10 @@ func ParseLevel(s string) slog.Leveler {
 
 // L is the logger implementation
 type L struct {
-	slogger    *slog.Logger
-	src        []string
-	showCaller bool
+	slogger          *slog.Logger
+	src              []string
+	showCaller       bool
+	callerPrefixTrim string
 }
 
 // New initializes a new logger. If w is nil, logs will be sent to stdout.
@@ -116,34 +117,44 @@ func New(opts ...Option) *L {
 	l = l.With(append(opt.keyvals, slog.String("src", opt.name))...)
 
 	return &L{
-		slogger:    l,
-		src:        []string{opt.name},
-		showCaller: opt.showCaller,
+		slogger:          l,
+		src:              []string{opt.name},
+		showCaller:       opt.showCaller,
+		callerPrefixTrim: opt.callerPrefixTrim,
 	}
 }
 
 // caller returns a string that returns a file and line from a specified depth
 // in the callstack.
-func caller(depth int) string {
+// func caller(depth int) string {
+func caller(depth int, prefixTrim string) string {
 	c := stack.Caller(depth)
 	// The format string here has special meaning. See
 	// https://godoc.org/github.com/go-stack/stack#Call.Format
-	return fmt.Sprintf("%+k/%s:%d", c, c, c)
+	const format = "%+k/%s:%d"
+	if prefixTrim != "" {
+		return strings.TrimPrefix(fmt.Sprintf(format, c, c, c), prefixTrim)
+	}
+	return fmt.Sprintf(format, c, c, c)
 }
 
 // New returns a sub-logger with the name appended to the existing logger's source
 func (l *L) New(name string) *L {
 	return &L{
-		src:     append(l.src, name),
-		slogger: l.slogger.With(slog.String("src", strings.Join(append(l.src, name), "."))),
+		src:              append(l.src, name),
+		slogger:          l.slogger.With(slog.String("src", strings.Join(append(l.src, name), "."))),
+		showCaller:       l.showCaller,
+		callerPrefixTrim: l.callerPrefixTrim,
 	}
 }
 
 // With returns a logger with the keyvals appended to the existing logger
 func (l *L) With(keyvals ...any) *L {
 	return &L{
-		src:     l.src,
-		slogger: l.slogger.With(keyvals...),
+		src:              l.src,
+		slogger:          l.slogger.With(keyvals...),
+		showCaller:       l.showCaller,
+		callerPrefixTrim: l.callerPrefixTrim,
 	}
 }
 
@@ -180,7 +191,7 @@ func (l *L) log(ctx context.Context, lvl slog.Level, msg any, keyvals ...any) {
 	}
 
 	if l.showCaller {
-		keyvals = append(keyvals, slog.String("caller", caller(3)))
+		keyvals = append(keyvals, slog.String("caller", caller(3, l.callerPrefixTrim)))
 	}
 
 	l.slogger.Log(ctx, lvl, toString(msg), keyvals...)

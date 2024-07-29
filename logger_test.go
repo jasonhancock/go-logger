@@ -120,6 +120,30 @@ func TestLogger(t *testing.T) {
 			require.Contains(t, buf.String(), "key1=value1")
 		})
 	})
+
+	t.Run("caller-trim", func(t *testing.T) {
+		defer buf.Reset()
+
+		l := New(
+			WithDestination(&buf),
+			WithName("somelogger"),
+			WithLevel("info"),
+			WithFormat(FormatLogFmt),
+			With("key1", "value1"),
+			WithCallerPrefixTrim("github.com/jasonhancock/go-logger"),
+		)
+
+		l.Info("foo", "key2", "value2")
+
+		require.Contains(t, buf.String(), "key1=value1")
+		require.Contains(t, buf.String(), "key2=value2")
+		require.Contains(t, buf.String(), "caller=logger_test.go")
+		require.Contains(t, buf.String(), "ts="+fmt.Sprintf("%d", time.Now().Year()))
+		require.Contains(t, buf.String(), "src=somelogger")
+		require.Contains(t, buf.String(), "level=info")
+		require.Contains(t, buf.String(), "msg=foo")
+
+	})
 }
 
 func TestLoggerJSON(t *testing.T) {
