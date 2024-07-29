@@ -2,17 +2,20 @@ package logger
 
 import (
 	"io"
+	"runtime/debug"
+	"strings"
 	"time"
 )
 
 type options struct {
-	format        string
-	name          string
-	keyvals       []interface{}
-	level         string
-	destination   io.Writer
-	showCaller    bool
-	timeFormatter TimeFormatterFunc
+	format           string
+	name             string
+	keyvals          []interface{}
+	level            string
+	destination      io.Writer
+	showCaller       bool
+	callerPrefixTrim string
+	timeFormatter    TimeFormatterFunc
 }
 
 type TimeFormatterFunc func(time.Time) string
@@ -72,4 +75,28 @@ func WithTimeLocation(loc *time.Location) Option {
 			return ts.In(loc).Format(time.RFC3339Nano)
 		}
 	}
+}
+
+// WithCallerPrefixTrim manually specifies a path to trim from the caller value
+// of each log message.
+func WithCallerPrefixTrim(str string) Option {
+	return func(o *options) {
+		if str != "" {
+			if !strings.HasSuffix(str, "/") {
+				str += "/"
+			}
+			o.callerPrefixTrim = str
+		}
+	}
+}
+
+// WithAutoCallerPrefixTrim intelligently figures out the prefix to trim from the
+// caller value of each log message.
+func WithAutoCallerPrefixTrim() Option {
+	bi, ok := debug.ReadBuildInfo()
+	if !ok || bi == nil {
+		return func(o *options) {}
+	}
+
+	return WithCallerPrefixTrim(bi.Main.Path)
 }
