@@ -2,6 +2,7 @@ package logger
 
 import (
 	"io"
+	"log/slog"
 	"runtime/debug"
 	"strings"
 	"time"
@@ -11,7 +12,7 @@ type options struct {
 	format           string
 	name             string
 	keyvals          []interface{}
-	level            string
+	leveler          slog.Leveler
 	destination      io.Writer
 	showCaller       bool
 	callerPrefixTrim string
@@ -40,7 +41,7 @@ func With(keyvals ...interface{}) Option {
 // WithLevel sets the logging level of the logger.
 func WithLevel(level string) Option {
 	return func(o *options) {
-		o.level = level
+		o.leveler = ParseLevel(level)
 	}
 }
 
@@ -99,4 +100,12 @@ func WithAutoCallerPrefixTrim() Option {
 	}
 
 	return WithCallerPrefixTrim(bi.Main.Path)
+}
+
+// WithLeveler gives you the ability to provide a leveler for dyanmically
+// adjusting the log level.
+func WithLeveler(leveler slog.Leveler) Option {
+	return func(o *options) {
+		o.leveler = leveler
+	}
 }
