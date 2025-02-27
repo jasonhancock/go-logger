@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-stack/stack"
@@ -84,7 +85,7 @@ func New(opts ...Option) *L {
 	var l *slog.Logger
 
 	handlerOpts := slog.HandlerOptions{
-		Level: ParseLevel(opt.level),
+		Level: opt.leveler,
 		ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
 			switch a.Key {
 			case slog.TimeKey:
@@ -252,4 +253,32 @@ func (l *L) LogError(msg string, err error, keyvals ...any) {
 	}
 
 	l.log(context.Background(), slog.LevelError, msg, keyvals...)
+}
+
+// DynamicLeveler gives you the ability to adjust the log level of the
+// application without having to restart it.
+type DynamicLeveler struct {
+	level *atomic.Value
+}
+
+// NewDynamicLeveler initializes a DynamicLeveler and sets the initial log level
+// to initialLevel.
+func NewDynamicLeveler(initialLevel string) *DynamicLeveler {
+	d := DynamicLeveler{
+		level: new(atomic.Value),
+	}
+
+	d.level.Store(ParseLevel(initialLevel))
+
+	return &d
+}
+
+// SetLevel changes the log level.
+func (d *DynamicLeveler) SetLevel(level string) {
+	d.level.Store(ParseLevel(level))
+}
+
+// Level returns the latest log level.
+func (d *DynamicLeveler) Level() slog.Level {
+	return d.level.Load().(slog.Level)
 }

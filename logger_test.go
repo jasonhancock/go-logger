@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -209,4 +211,37 @@ func (m *myMulti) WrappedErrors() []error {
 
 func (m *myMulti) Error() string {
 	return errors.Join(m.errs...).Error()
+}
+
+func TestDynamicLogger(t *testing.T) {
+	var buf bytes.Buffer
+
+	logLeveler := NewDynamicLeveler("info")
+	l := New(
+		WithDestination(&buf),
+		WithName("somelogger"),
+		WithLeveler(logLeveler),
+		WithFormat(FormatLogFmt),
+	)
+
+	var lvl = new(atomic.Value)
+
+	lvl.Store(slog.LevelInfo)
+
+	// create a sub logger so we can verify sub-loggers also get the dynamic leveler.
+	sub := l.New("sub")
+
+	sub.Info("hello world")
+	sub.Debug("hello world 2")
+
+	// Change the level
+	logLeveler.SetLevel("debug")
+
+	sub.Debug("hello world 3")
+	sub.Info("hello world 4")
+
+	require.Contains(t, buf.String(), `msg="hello world"`)
+	require.NotContains(t, buf.String(), `msg="hello world 2"`)
+	require.Contains(t, buf.String(), `msg="hello world 3"`)
+	require.Contains(t, buf.String(), `msg="hello world 4"`)
 }
