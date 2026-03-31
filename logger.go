@@ -115,7 +115,9 @@ func New(opts ...Option) *L {
 		l = slog.New(slog.NewTextHandler(opt.destination, &handlerOpts))
 	}
 
-	l = l.With(append(opt.keyvals, slog.String("src", opt.name))...)
+	if len(opt.keyvals) > 0 {
+		l = l.With(opt.keyvals...)
+	}
 
 	return &L{
 		slogger:          l,
@@ -143,7 +145,7 @@ func caller(depth int, prefixTrim string) string {
 func (l *L) New(name string) *L {
 	return &L{
 		src:              append(l.src, name),
-		slogger:          l.slogger.With(slog.String("src", strings.Join(append(l.src, name), "."))),
+		slogger:          l.slogger,
 		showCaller:       l.showCaller,
 		callerPrefixTrim: l.callerPrefixTrim,
 	}
@@ -191,6 +193,7 @@ func (l *L) log(ctx context.Context, lvl slog.Level, msg any, keyvals ...any) {
 		return
 	}
 
+	keyvals = append([]any{slog.String("src", strings.Join(l.src, "."))}, keyvals...)
 	if l.showCaller {
 		keyvals = append(keyvals, slog.String("caller", caller(3, l.callerPrefixTrim)))
 	}
