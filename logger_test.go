@@ -67,6 +67,7 @@ func TestLogger(t *testing.T) {
 		require.Contains(t, buf.String(), "key4=value4")
 		require.Contains(t, buf.String(), "key5=value5")
 		require.Contains(t, buf.String(), "src=somelogger.sublogger2")
+		require.NotContains(t, buf.String(), "src=somelogger ")
 	})
 
 	t.Run("LogError", func(t *testing.T) {
