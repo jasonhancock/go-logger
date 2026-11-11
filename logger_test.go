@@ -322,3 +322,31 @@ func TestContextResolution(t *testing.T) {
 		require.Equal(t, before, calls.Load())
 	})
 }
+
+func TestSubLoggerSiblingsDoNotShareSrc(t *testing.T) {
+	var buf bytes.Buffer
+
+	l := New(
+		WithDestination(&buf),
+		WithName("root"),
+		WithFormat(FormatLogFmt),
+	)
+
+	// Nest deep enough that the src slice has spare capacity, which is when
+	// append would otherwise share the backing array between siblings.
+	parent := l.New("a").New("b")
+	first := parent.New("first")
+	second := parent.New("second")
+
+	first.Info("msg")
+	require.Contains(t, buf.String(), "src=root.a.b.first")
+	buf.Reset()
+
+	second.Info("msg")
+	require.Contains(t, buf.String(), "src=root.a.b.second")
+	buf.Reset()
+
+	// Logging via first again must not have been clobbered by creating second.
+	first.Info("msg")
+	require.Contains(t, buf.String(), "src=root.a.b.first")
+}
