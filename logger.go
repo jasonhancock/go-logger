@@ -51,12 +51,28 @@ func ParseLevel(s string) slog.Leveler {
 	return LevelAll
 }
 
+// ContextResolutionFunc extracts fields from a context.Context to be added to
+// each log line. It returns alternating key/value pairs, using the same
+// convention as the keyvals passed to the logging methods
+// (e.g. []any{"request_id", id, "user", user}). If an odd number of items is
+// returned, the trailing key is dropped.
+//
+// Resolvers are called for every log line that passes the level check,
+// including lines logged via the non-Context methods (which pass
+// context.Background()), so they must handle contexts that don't carry the
+// values they look for, typically by returning nil. A nil ctx passed to a
+// logging method is replaced with context.Background(), so resolvers never
+// receive nil. Resolvers may be called
+// concurrently and should be cheap.
+type ContextResolutionFunc func(ctx context.Context) []any
+
 // L is the logger implementation
 type L struct {
-	slogger          *slog.Logger
-	src              []string
-	showCaller       bool
-	callerPrefixTrim string
+	slogger                *slog.Logger
+	src                    []string
+	showCaller             bool
+	callerPrefixTrim       string
+	contextResolutionFuncs []ContextResolutionFunc
 }
 
 // New initializes a new logger. If w is nil, logs will be sent to stdout.
@@ -120,10 +136,11 @@ func New(opts ...Option) *L {
 	}
 
 	return &L{
-		slogger:          l,
-		src:              []string{opt.name},
-		showCaller:       opt.showCaller,
-		callerPrefixTrim: opt.callerPrefixTrim,
+		slogger:                l,
+		src:                    []string{opt.name},
+		showCaller:             opt.showCaller,
+		callerPrefixTrim:       opt.callerPrefixTrim,
+		contextResolutionFuncs: opt.contextResolutionFuncs,
 	}
 }
 
@@ -144,20 +161,22 @@ func caller(depth int, prefixTrim string) string {
 // New returns a sub-logger with the name appended to the existing logger's source
 func (l *L) New(name string) *L {
 	return &L{
-		src:              append(l.src, name),
-		slogger:          l.slogger,
-		showCaller:       l.showCaller,
-		callerPrefixTrim: l.callerPrefixTrim,
+		src:                    append(l.src, name),
+		slogger:                l.slogger,
+		showCaller:             l.showCaller,
+		callerPrefixTrim:       l.callerPrefixTrim,
+		contextResolutionFuncs: l.contextResolutionFuncs,
 	}
 }
 
 // With returns a logger with the keyvals appended to the existing logger
 func (l *L) With(keyvals ...any) *L {
 	return &L{
-		src:              l.src,
-		slogger:          l.slogger.With(keyvals...),
-		showCaller:       l.showCaller,
-		callerPrefixTrim: l.callerPrefixTrim,
+		src:                    l.src,
+		slogger:                l.slogger.With(keyvals...),
+		showCaller:             l.showCaller,
+		callerPrefixTrim:       l.callerPrefixTrim,
+		contextResolutionFuncs: l.contextResolutionFuncs,
 	}
 }
 
@@ -166,9 +185,21 @@ func (l *L) Debug(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelDebug, msg, keyvals...)
 }
 
+// DebugContext logs a message at the debug level, including any fields
+// extracted from ctx by the configured ContextResolutionFuncs.
+func (l *L) DebugContext(ctx context.Context, msg any, keyvals ...any) {
+	l.log(ctx, slog.LevelDebug, msg, keyvals...)
+}
+
 // Info logs a message at the info level
 func (l *L) Info(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelInfo, msg, keyvals...)
+}
+
+// InfoContext logs a message at the info level, including any fields
+// extracted from ctx by the configured ContextResolutionFuncs.
+func (l *L) InfoContext(ctx context.Context, msg any, keyvals ...any) {
+	l.log(ctx, slog.LevelInfo, msg, keyvals...)
 }
 
 // Warn logs a message at the warning level
@@ -176,9 +207,21 @@ func (l *L) Warn(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelWarn, msg, keyvals...)
 }
 
+// WarnContext logs a message at the warning level, including any fields
+// extracted from ctx by the configured ContextResolutionFuncs.
+func (l *L) WarnContext(ctx context.Context, msg any, keyvals ...any) {
+	l.log(ctx, slog.LevelWarn, msg, keyvals...)
+}
+
 // Err logs a message at the error level
 func (l *L) Err(msg any, keyvals ...any) {
 	l.log(context.Background(), slog.LevelError, msg, keyvals...)
+}
+
+// ErrContext logs a message at the error level, including any fields
+// extracted from ctx by the configured ContextResolutionFuncs.
+func (l *L) ErrContext(ctx context.Context, msg any, keyvals ...any) {
+	l.log(ctx, slog.LevelError, msg, keyvals...)
 }
 
 // Fatal logs a message at the fatal level and also exits the program by calling
@@ -188,14 +231,38 @@ func (l *L) Fatal(msg any, keyvals ...any) {
 	os.Exit(1)
 }
 
+// FatalContext logs a message at the fatal level, including any fields
+// extracted from ctx by the configured ContextResolutionFuncs, and then exits
+// the program by calling os.Exit
+func (l *L) FatalContext(ctx context.Context, msg any, keyvals ...any) {
+	l.log(ctx, LevelFatal, msg, keyvals...)
+	os.Exit(1)
+}
+
 func (l *L) log(ctx context.Context, lvl slog.Level, msg any, keyvals ...any) {
 	if l == nil {
+		return
+	}
+
+	if ctx == nil {
+		ctx = context.Background()
+	}
+
+	if !l.slogger.Enabled(ctx, lvl) {
 		return
 	}
 
 	keyvals = append([]any{slog.String("src", strings.Join(l.src, "."))}, keyvals...)
 	if l.showCaller {
 		keyvals = append(keyvals, slog.String("caller", caller(3, l.callerPrefixTrim)))
+	}
+
+	for _, fn := range l.contextResolutionFuncs {
+		kv := fn(ctx)
+		if len(kv)%2 != 0 {
+			kv = kv[:len(kv)-1]
+		}
+		keyvals = append(keyvals, kv...)
 	}
 
 	l.slogger.Log(ctx, lvl, toString(msg), keyvals...)
@@ -237,15 +304,24 @@ type multiError interface {
 
 // LogError logs an error. It automatically unwinds multi-errors (not recursively...yet).
 func (l *L) LogError(msg string, err error, keyvals ...any) {
+	l.log(context.Background(), slog.LevelError, msg, errorKeyvals(err, keyvals)...)
+}
+
+// LogErrorContext is like LogError, but includes any fields extracted from ctx
+// by the configured ContextResolutionFuncs.
+func (l *L) LogErrorContext(ctx context.Context, msg string, err error, keyvals ...any) {
+	l.log(ctx, slog.LevelError, msg, errorKeyvals(err, keyvals)...)
+}
+
+// errorKeyvals appends err to keyvals, unwinding multi-errors into
+// error_00, error_01, etc.
+func errorKeyvals(err error, keyvals []any) []any {
 	mErr, ok := err.(multiError)
 	if !ok {
-		l.log(context.Background(), slog.LevelError, msg, append(keyvals, slog.String("error", err.Error()))...)
-		return
+		return append(keyvals, slog.String("error", err.Error()))
 	}
 
-	errs := mErr.WrappedErrors()
-
-	for i, e := range errs {
+	for i, e := range mErr.WrappedErrors() {
 		keyvals = append(
 			keyvals,
 			slog.String(
@@ -255,7 +331,7 @@ func (l *L) LogError(msg string, err error, keyvals ...any) {
 		)
 	}
 
-	l.log(context.Background(), slog.LevelError, msg, keyvals...)
+	return keyvals
 }
 
 // DynamicLeveler gives you the ability to adjust the log level of the

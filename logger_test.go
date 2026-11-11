@@ -2,6 +2,7 @@ package logger
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -245,4 +246,79 @@ func TestDynamicLogger(t *testing.T) {
 	require.NotContains(t, buf.String(), `msg="hello world 2"`)
 	require.Contains(t, buf.String(), `msg="hello world 3"`)
 	require.Contains(t, buf.String(), `msg="hello world 4"`)
+}
+
+type ctxKey struct{}
+
+func TestContextResolution(t *testing.T) {
+	var buf bytes.Buffer
+	var calls atomic.Int32
+
+	l := New(
+		WithDestination(&buf),
+		WithName("ctxlogger"),
+		WithLevel("info"),
+		WithFormat(FormatLogFmt),
+		WithContextResolutionFunc(func(ctx context.Context) []any {
+			calls.Add(1)
+			if v, ok := ctx.Value(ctxKey{}).(string); ok {
+				return []any{"request_id", v}
+			}
+			return nil
+		}),
+		WithContextResolutionFunc(func(ctx context.Context) []any {
+			return []any{"odd1", "v1", "dangling"}
+		}),
+	)
+
+	ctx := context.WithValue(context.Background(), ctxKey{}, "abc123")
+
+	tests := []struct {
+		name string
+		fn   func()
+	}{
+		{"info", func() { l.InfoContext(ctx, "msg") }},
+		{"warn", func() { l.WarnContext(ctx, "msg") }},
+		{"err", func() { l.ErrContext(ctx, "msg") }},
+		{"log-error", func() { l.LogErrorContext(ctx, "msg", errors.New("boom")) }},
+		{"sub-logger", func() { l.New("sub").InfoContext(ctx, "msg") }},
+		{"with", func() { l.With("k", "v").InfoContext(ctx, "msg") }},
+		{"with-then-new", func() { l.With("k", "v").New("sub").InfoContext(ctx, "msg") }},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			defer buf.Reset()
+			tt.fn()
+			out := buf.String()
+			require.Contains(t, out, "request_id=abc123")
+			require.Contains(t, out, "odd1=v1")
+			require.NotContains(t, out, "dangling")
+			require.NotContains(t, out, "BADKEY")
+			require.Contains(t, out, "caller=github.com/jasonhancock/go-logger/logger_test.go")
+		})
+	}
+
+	t.Run("no-value-in-context", func(t *testing.T) {
+		defer buf.Reset()
+		l.Info("msg")
+		require.NotContains(t, buf.String(), "request_id")
+		require.Contains(t, buf.String(), "msg=msg")
+	})
+
+	t.Run("nil-context", func(t *testing.T) {
+		defer buf.Reset()
+		//nolint:staticcheck // intentionally passing a nil context
+		l.InfoContext(nil, "msg")
+		require.Contains(t, buf.String(), "msg=msg")
+		require.NotContains(t, buf.String(), "request_id")
+	})
+
+	t.Run("disabled-level-skips-resolvers", func(t *testing.T) {
+		defer buf.Reset()
+		before := calls.Load()
+		l.DebugContext(ctx, "debug_message")
+		require.Empty(t, buf.String())
+		require.Equal(t, before, calls.Load())
+	})
 }

@@ -9,14 +9,15 @@ import (
 )
 
 type options struct {
-	format           string
-	name             string
-	keyvals          []interface{}
-	leveler          slog.Leveler
-	destination      io.Writer
-	showCaller       bool
-	callerPrefixTrim string
-	timeFormatter    TimeFormatterFunc
+	format                 string
+	name                   string
+	keyvals                []interface{}
+	leveler                slog.Leveler
+	destination            io.Writer
+	showCaller             bool
+	callerPrefixTrim       string
+	timeFormatter          TimeFormatterFunc
+	contextResolutionFuncs []ContextResolutionFunc
 }
 
 type TimeFormatterFunc func(time.Time) string
@@ -107,5 +108,15 @@ func WithAutoCallerPrefixTrim() Option {
 func WithLeveler(leveler slog.Leveler) Option {
 	return func(o *options) {
 		o.leveler = leveler
+	}
+}
+
+// WithContextResolutionFunc registers a function that extracts fields from the
+// context passed to the *Context logging methods. It can be specified multiple
+// times; resolvers run in the order they were registered, and their fields are
+// appended after the caller. See ContextResolutionFunc for the contract.
+func WithContextResolutionFunc(fn ContextResolutionFunc) Option {
+	return func(o *options) {
+		o.contextResolutionFuncs = append(o.contextResolutionFuncs, fn)
 	}
 }
