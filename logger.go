@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -161,7 +162,9 @@ func caller(depth int, prefixTrim string) string {
 // New returns a sub-logger with the name appended to the existing logger's source
 func (l *L) New(name string) *L {
 	return &L{
-		src:                    append(l.src, name),
+		// Clip capacity so append always allocates; otherwise sibling
+		// sub-loggers can share (and overwrite) the same backing array.
+		src:                    append(slices.Clip(l.src), name),
 		slogger:                l.slogger,
 		showCaller:             l.showCaller,
 		callerPrefixTrim:       l.callerPrefixTrim,
