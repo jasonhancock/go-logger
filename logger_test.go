@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -349,4 +350,56 @@ func TestSubLoggerSiblingsDoNotShareSrc(t *testing.T) {
 	// Logging via first again must not have been clobbered by creating second.
 	first.Info("msg")
 	require.Contains(t, buf.String(), "src=root.a.b.first")
+}
+
+// logViaHelper logs through one wrapper frame, like an adapter would. It
+// returns the line of its l.Info call.
+func logViaHelper(l *L, msg string) int {
+	_, _, line, _ := runtime.Caller(0)
+	l.Info(msg) // must stay on the line after runtime.Caller
+	return line + 1
+}
+
+// logViaTwoHelpers logs through two wrapper frames.
+func logViaTwoHelpers(l *L, msg string) {
+	logViaHelper(l, msg)
+}
+
+func TestWithCallerSkip(t *testing.T) {
+	var buf bytes.Buffer
+	l := New(
+		WithDestination(&buf),
+		WithFormat(FormatLogFmt),
+		WithCallerPrefixTrim("github.com/jasonhancock/go-logger/"),
+	)
+
+	t.Run("without skip reports the helper", func(t *testing.T) {
+		buf.Reset()
+		helperLine := logViaHelper(l, "foo")
+		require.Contains(t, buf.String(), fmt.Sprintf("caller=logger_test.go:%d\n", helperLine))
+	})
+
+	t.Run("skip one reports the helper's caller", func(t *testing.T) {
+		buf.Reset()
+		_, _, line, _ := runtime.Caller(0)
+		logViaHelper(l.WithCallerSkip(1), "foo")
+		require.Contains(t, buf.String(), fmt.Sprintf("caller=logger_test.go:%d\n", line+1))
+	})
+
+	t.Run("skips accumulate and survive New and With", func(t *testing.T) {
+		sub := l.WithCallerSkip(1).New("sub").With("k", "v").WithCallerSkip(1)
+		buf.Reset()
+		_, _, line, _ := runtime.Caller(0)
+		logViaTwoHelpers(sub, "foo")
+		require.Contains(t, buf.String(), fmt.Sprintf("caller=logger_test.go:%d\n", line+1))
+		require.Contains(t, buf.String(), "k=v")
+		require.Contains(t, buf.String(), "src=go-logger.test.sub")
+	})
+
+	t.Run("original logger is unaffected", func(t *testing.T) {
+		_ = l.WithCallerSkip(5)
+		buf.Reset()
+		helperLine := logViaHelper(l, "foo")
+		require.Contains(t, buf.String(), fmt.Sprintf("caller=logger_test.go:%d\n", helperLine))
+	})
 }

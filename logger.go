@@ -72,6 +72,7 @@ type L struct {
 	slogger                *slog.Logger
 	src                    []string
 	showCaller             bool
+	callerSkip             int
 	callerPrefixTrim       string
 	contextResolutionFuncs []ContextResolutionFunc
 }
@@ -167,6 +168,23 @@ func (l *L) New(name string) *L {
 		src:                    append(slices.Clip(l.src), name),
 		slogger:                l.slogger,
 		showCaller:             l.showCaller,
+		callerSkip:             l.callerSkip,
+		callerPrefixTrim:       l.callerPrefixTrim,
+		contextResolutionFuncs: l.contextResolutionFuncs,
+	}
+}
+
+// WithCallerSkip returns a logger that reports the caller n additional stack
+// frames up. Use it in helpers and adapters that wrap the logger, so the
+// caller is the code calling the helper rather than the helper itself. Skips
+// accumulate: l.WithCallerSkip(1).WithCallerSkip(1) skips two frames.
+// Sub-loggers created with New and With keep the skip.
+func (l *L) WithCallerSkip(n int) *L {
+	return &L{
+		src:                    l.src,
+		slogger:                l.slogger,
+		showCaller:             l.showCaller,
+		callerSkip:             l.callerSkip + n,
 		callerPrefixTrim:       l.callerPrefixTrim,
 		contextResolutionFuncs: l.contextResolutionFuncs,
 	}
@@ -178,6 +196,7 @@ func (l *L) With(keyvals ...any) *L {
 		src:                    l.src,
 		slogger:                l.slogger.With(keyvals...),
 		showCaller:             l.showCaller,
+		callerSkip:             l.callerSkip,
 		callerPrefixTrim:       l.callerPrefixTrim,
 		contextResolutionFuncs: l.contextResolutionFuncs,
 	}
@@ -257,7 +276,7 @@ func (l *L) log(ctx context.Context, lvl slog.Level, msg any, keyvals ...any) {
 
 	keyvals = append([]any{slog.String("src", strings.Join(l.src, "."))}, keyvals...)
 	if l.showCaller {
-		keyvals = append(keyvals, slog.String("caller", caller(3, l.callerPrefixTrim)))
+		keyvals = append(keyvals, slog.String("caller", caller(3+l.callerSkip, l.callerPrefixTrim)))
 	}
 
 	for _, fn := range l.contextResolutionFuncs {
